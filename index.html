@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>シンプルAR 3Dビューア（QRなし）</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- A-Frame / WebXR -->
+  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+
+    a-scene {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50 text-gray-800">
+  <!-- モデルをAR開始時に前方へ配置するコンポーネント -->
+  <script>
+    AFRAME.registerComponent('ar-placement-model', {
+      schema: {
+        position: { type: 'vec3', default: { x: 0, y: 0, z: -1 } },  // 前方1m
+        scale: { type: 'vec3', default: { x: 0.5, y: 0.5, z: 0.5 } },
+        rotation: { type: 'vec3', default: { x: 0, y: 180, z: 0 } }
+      },
+      init: function () {
+        const el = this.el;
+        const scene = el.sceneEl;
+        el.setAttribute('visible', false);
+
+        scene.addEventListener('enter-vr', () => {
+          if (scene.is('ar-mode')) {
+            const d = this.data;
+            el.setAttribute('position', `${d.position.x} ${d.position.y} ${d.position.z}`);
+            el.setAttribute('scale', `${d.scale.x} ${d.scale.y} ${d.scale.z}`);
+            el.setAttribute('rotation', `${d.rotation.x} ${d.rotation.y} ${d.rotation.z}`);
+            el.setAttribute('visible', true);
+          }
+        });
+
+        scene.addEventListener('exit-vr', () => {
+          el.setAttribute('visible', false);
+        });
+      }
+    });
+
+    // ?model= でGLB URLを差し替え（未指定時はデモモデル）
+    function resolveModelUrl() {
+      const url = new URL(location.href);
+      const q = url.searchParams.get('model');
+      return q ? q : 'https://cdn.aframe.io/examples/ar/models/astronaut.glb';
+    }
+
+    function isUrl(s) { try { new URL(s); return true; } catch { return false; } }
+
+    // ユーザー操作でARへ入る
+    function startAR() {
+      const scene = document.getElementById('ar-scene');
+      const modelEl = document.getElementById('the-model');
+
+      const src = resolveModelUrl();
+      if (isUrl(src)) modelEl.setAttribute('gltf-model', src);
+
+      // UI切替 → シーン表示 → enterVR() でARに突入
+      document.getElementById('start-ui').classList.add('hidden');
+      scene.style.display = 'block';
+      scene.enterVR();
+    }
+
+    // HTTPS/localhost警告
+    window.addEventListener('load', () => {
+      const isSecure = location.protocol === 'https:' || location.hostname === 'localhost';
+      if (!isSecure) document.getElementById('https-warning').classList.remove('hidden');
+    });
+  </script>
+
+  <!-- 起動UI -->
+  <main id="start-ui" class="min-h-screen grid place-items-center p-6">
+    <div class="w-full max-w-md bg-white shadow-xl rounded-2xl p-8 text-center">
+      <h1 class="text-2xl font-bold text-indigo-600 mb-3">AR 3Dビューア（QRなし）</h1>
+      <p class="text-sm text-gray-600 mb-6">
+        下のボタンを押すとARが開始され、カメラ前方に3Dモデル（.glb）が表示されます。<br>
+        任意モデルに差し替える場合は、URLに
+        <code class="bg-indigo-50 px-1 rounded">?model=完全URL.glb</code> を付けて開いてください。
+      </p>
+
+      <button onclick="startAR()"
+        class="w-full py-3 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 active:scale-[0.99] transition">
+        ARで表示
+      </button>
+
+      <p id="https-warning" class="hidden mt-4 text-amber-600 text-sm">
+        ※ カメラ利用のため <strong>HTTPS</strong> または <strong>localhost</strong> で開いてください。
+      </p>
+
+      <div class="mt-6 text-left text-xs text-gray-500 space-y-2">
+        <p>ヒント：</p>
+        <ul class="list-disc ml-5 space-y-1">
+          <li>初期位置はカメラ前方1m／スケール0.5。必要ならコンポーネント属性で調整。</li>
+          <li>iOS Safariはユーザー操作内でのみAR開始が許可（このボタンでOK）。</li>
+          <li>平面検出・タップ設置は未実装（必要ならWebXR Hit Testを追加可能）。</li>
+        </ul>
+      </div>
+    </div>
+  </main>
+
+  <!-- A-Frame シーン（初期非表示。startARで表示＆enterVR） -->
+  <a-scene id="ar-scene" vr-mode-ui="enabled: false" <!-- 右下の[]ボタンは非表示。自前ボタンで入る -->
+    renderer="logarithmicDepthBuffer: true;"
+    ar-mode-ui="enabled: true" <!-- 予備としてARボタンUIを出したい場合はtrueのまま -->
+    embedded
+    >
+    <!-- 照明 -->
+    <a-light type="ambient" intensity="0.5"></a-light>
+    <a-light type="directional" intensity="0.8" position="1 2 4"></a-light>
+
+    <!-- モデル（起動時にgltf-modelを差し替え） -->
+    <a-entity id="the-model" gltf-model="https://cdn.aframe.io/examples/ar/models/astronaut.glb"
+      ar-placement-model="position: 0 0 -1; scale: 0.5 0.5 0.5; rotation: 0 180 0" visible="false" shadow></a-entity>
+
+    <!-- カメラ -->
+    <a-entity camera></a-entity>
+  </a-scene>
+</body>
+
+</html>
